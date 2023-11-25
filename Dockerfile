@@ -1,9 +1,9 @@
-FROM ubuntu:bionic-20190612
+FROM ubuntu:jammy-20231004
 
 LABEL maintainer="sameer@damagehead.com"
 
 ENV MYSQL_USER=mysql \
-    MYSQL_VERSION=5.7.26 \
+    MYSQL_VERSION=8.0.35 \
     MYSQL_DATA_DIR=/var/lib/mysql \
     MYSQL_RUN_DIR=/run/mysqld \
     MYSQL_LOG_DIR=/var/log/mysql
