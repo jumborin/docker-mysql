@@ -11,8 +11,8 @@ DB_REMOTE_ROOT_NAME=${DB_REMOTE_ROOT_NAME:-}
 DB_REMOTE_ROOT_PASS=${DB_REMOTE_ROOT_PASS:-}
 DB_REMOTE_ROOT_HOST=${DB_REMOTE_ROOT_HOST:-"172.17.0.1"}
 
-MYSQL_CHARSET=${MYSQL_CHARSET:-"utf8"}
-MYSQL_COLLATION=${MYSQL_COLLATION:-"utf8_unicode_ci"}
+MYSQL_CHARSET=${MYSQL_CHARSET:-"utf8mb4"}
+MYSQL_COLLATION=${MYSQL_COLLATION:-"utf8mb4_unicode_ci"}
 
 create_data_dir() {
   mkdir -p ${MYSQL_DATA_DIR}
@@ -66,11 +66,11 @@ initialize_mysql_database() {
   # initialize MySQL data directory
   if [ ! -d ${MYSQL_DATA_DIR}/mysql ]; then
     echo "Installing database..."
-    mysqld --initialize-insecure --user=mysql >/dev/null 2>&1
+    mysqld --initialize-insecure --user=mysql --lower_case_table_names=0 >/dev/null 2>&1
 
     # start mysql server
     echo "Starting MySQL server..."
-    /usr/bin/mysqld_safe >/dev/null 2>&1 &
+    /usr/bin/mysqld_safe --lower_case_table_names=0 >/dev/null 2>&1 &
 
     # wait for mysql server to start (max 30 seconds)
     timeout=30
@@ -99,7 +99,7 @@ initialize_mysql_database() {
       mysql -uroot \
       -e "CREATE USER IF NOT EXISTS '${DB_REMOTE_ROOT_NAME}'@'${DB_REMOTE_ROOT_HOST}' IDENTIFIED BY '${DB_REMOTE_ROOT_PASS}';"
       mysql -uroot \
-      -e "GRANT ALL PRIVILEGES ON *.* TO '${DB_REMOTE_ROOT_NAME}'@'${DB_REMOTE_ROOT_HOST}' WITH GRANT OPTION; FLUSH PRIVILEGES;"
+      -e "GRANT ALL PRIVILEGES ON *.* TO '${DB_REMOTE_ROOT_NAME}'@'${DB_REMOTE_ROOT_HOST}' IDENTIFIED BY '${DB_REMOTE_ROOT_PASS} WITH GRANT OPTION; FLUSH PRIVILEGES;"
     fi
 
     /usr/bin/mysqladmin --defaults-file=/etc/mysql/debian.cnf shutdown
@@ -109,7 +109,7 @@ initialize_mysql_database() {
 create_users_and_databases() {
   # create new user / database
   if [ -n "${DB_USER}" -o -n "${DB_NAME}" ]; then
-    /usr/bin/mysqld_safe >/dev/null 2>&1 &
+    /usr/bin/mysqld_safe --lower_case_table_names=0 >/dev/null 2>&1 &
 
     # wait for mysql server to start (max 30 seconds)
     timeout=30
@@ -131,9 +131,9 @@ create_users_and_databases() {
           if [ -n "${DB_USER}" ]; then
             echo "Granting access to database \"$db\" for user \"${DB_USER}\"..."
             mysql --defaults-file=/etc/mysql/debian.cnf \
-            -e "CREATE USER IF NOT EXISTS \`$db\`.* TO '${DB_USER}' IDENTIFIED BY '${DB_PASS}';"
+            -e "CREATE USER IF NOT EXISTS '${DB_USER}' IDENTIFIED BY '${DB_PASS}';"
             mysql --defaults-file=/etc/mysql/debian.cnf \
-            -e "GRANT ALL PRIVILEGES ON \`$db\`.* TO '${DB_USER}'"
+            -e "GRANT ALL PRIVILEGES ON \`$db\`.* TO '${DB_USER}';"
           fi
         done
     fi
