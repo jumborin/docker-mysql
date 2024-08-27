@@ -11,8 +11,8 @@ DB_REMOTE_ROOT_NAME=${DB_REMOTE_ROOT_NAME:-}
 DB_REMOTE_ROOT_PASS=${DB_REMOTE_ROOT_PASS:-}
 DB_REMOTE_ROOT_HOST=${DB_REMOTE_ROOT_HOST:-"172.17.0.1"}
 
-MYSQL_CHARSET=${MYSQL_CHARSET:-"utf8"}
-MYSQL_COLLATION=${MYSQL_COLLATION:-"utf8_unicode_ci"}
+MYSQL_CHARSET=${MYSQL_CHARSET:-"utf8mb4"}
+MYSQL_COLLATION=${MYSQL_COLLATION:-"utf8mb4_unicode_ci"}
 
 create_data_dir() {
   mkdir -p ${MYSQL_DATA_DIR}
@@ -39,11 +39,12 @@ listen() {
   sed -e "s/^bind-address\(.*\)=.*/bind-address = $1/" -i /etc/mysql/mysql.conf.d/mysqld.cnf
 }
 
+
 apply_configuration_fixes() {
   # disable error log
   sed 's/^log_error/# log_error/' -i /etc/mysql/mysql.conf.d/mysqld.cnf
 
-  # Fixing StartUp Porblems with some DNS Situations and Speeds up the stuff
+  # Fixing StartUp Problems with some DNS Situations and Speeds up the stuff
   # http://www.percona.com/blog/2008/05/31/dns-achilles-heel-mysql-installation/
   cat > /etc/mysql/conf.d/mysql-skip-name-resolv.cnf <<EOF
 [mysqld]
@@ -66,11 +67,11 @@ initialize_mysql_database() {
   # initialize MySQL data directory
   if [ ! -d ${MYSQL_DATA_DIR}/mysql ]; then
     echo "Installing database..."
-    mysqld --initialize-insecure --user=mysql >/dev/null 2>&1
+    mysqld --initialize-insecure --user=mysql --lower_case_table_names=2 >/dev/null 2>&1
 
     # start mysql server
     echo "Starting MySQL server..."
-    /usr/bin/mysqld_safe >/dev/null 2>&1 &
+    /usr/bin/mysqld_safe --lower_case_table_names=2 >/dev/null 2>&1 &
 
     # wait for mysql server to start (max 30 seconds)
     timeout=30
@@ -92,10 +93,12 @@ initialize_mysql_database() {
     ## as well as to shut down or starting up the mysql server via mysqladmin
     echo "Creating debian-sys-maint user..."
     mysql -uroot -e "CREATE USER 'debian-sys-maint'@'localhost' IDENTIFIED BY '';"
-    mysql -uroot -e "GRANT ALL PRIVILEGES on *.* TO 'debian-sys-maint'@'localhost' IDENTIFIED BY '' WITH GRANT OPTION;"
+    mysql -uroot -e "GRANT ALL PRIVILEGES on *.* TO 'debian-sys-maint'@'localhost' WITH GRANT OPTION;"
 
     if [ -n "${DB_REMOTE_ROOT_NAME}" -a -n "${DB_REMOTE_ROOT_HOST}" ]; then
       echo "Creating remote user \"${DB_REMOTE_ROOT_NAME}\" with root privileges..."
+      mysql -uroot \
+      -e "CREATE USER '${DB_REMOTE_ROOT_NAME}'@'${DB_REMOTE_ROOT_HOST}' IDENTIFIED BY '${DB_REMOTE_ROOT_PASS}';"
       mysql -uroot \
       -e "GRANT ALL PRIVILEGES ON *.* TO '${DB_REMOTE_ROOT_NAME}'@'${DB_REMOTE_ROOT_HOST}' IDENTIFIED BY '${DB_REMOTE_ROOT_PASS}' WITH GRANT OPTION; FLUSH PRIVILEGES;"
     fi
@@ -107,14 +110,14 @@ initialize_mysql_database() {
 create_users_and_databases() {
   # create new user / database
   if [ -n "${DB_USER}" -o -n "${DB_NAME}" ]; then
-    /usr/bin/mysqld_safe >/dev/null 2>&1 &
+    /usr/bin/mysqld_safe --lower_case_table_names=2 >/dev/null 2>&1 &
 
     # wait for mysql server to start (max 30 seconds)
     timeout=30
     while ! /usr/bin/mysqladmin -u root status >/dev/null 2>&1
     do
       timeout=$(($timeout - 1))
-      if [ $timeout -eq 0 ]; then
+      if [ $timeout -eq 0 ];then
         echo "Could not connect to mysql server. Aborting..."
         exit 1
       fi
@@ -129,7 +132,11 @@ create_users_and_databases() {
           if [ -n "${DB_USER}" ]; then
             echo "Granting access to database \"$db\" for user \"${DB_USER}\"..."
             mysql --defaults-file=/etc/mysql/debian.cnf \
-            -e "GRANT ALL PRIVILEGES ON \`$db\`.* TO '${DB_USER}' IDENTIFIED BY '${DB_PASS}';"
+            -e "CREATE USER IF NOT EXISTS '${DB_USER}' IDENTIFIED BY '${DB_PASS}';"
+            mysql --defaults-file=/etc/mysql/debian.cnf \
+            -e "GRANT ALL PRIVILEGES ON \`$db\`.* TO '${DB_USER}';"
+            mysql --defaults-file=/etc/mysql/debian.cnf \
+            -e "GRANT ALL PRIVILEGES ON *.* TO '${DB_USER}';"
           fi
         done
     fi
